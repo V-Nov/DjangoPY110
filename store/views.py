@@ -1,11 +1,13 @@
 import os
 
 from django.http import JsonResponse
+from django.shortcuts import render
 
 from logic.services import filtering_category
-from .models import DATABASE
+
 from django.http import HttpResponse
 from logic.services import view_in_cart, add_to_cart, remove_from_cart
+from store.models import DATABASE
 
 
 def products_view(request):
@@ -27,20 +29,18 @@ def products_view(request):
 
 def products_page_view(request, page):
     if request.method == "GET":
-        if isinstance(page, int):
-            page = str(page)
-            if page not in DATABASE:
-                return HttpResponse(status=404)
-
-            html_file = DATABASE.get(page).get('html')
-            return get_html(f'store/products/{html_file}.html')
-
         if isinstance(page, str):
-            for data in DATABASE.values():    #f'store/products/{page}.html'
-                print(data)
+            for data in DATABASE.values():
                 if data['html'] == page:
-                    return get_html(f'store/products/{page}.html')
-            return HttpResponse(status=404)
+                    return render(request, "store/product.html", context={"product": data})
+
+        elif isinstance(page, int):
+            # Обрабатываем условие того, что пытаемся получить страницу товара по его id
+            data = DATABASE.get(str(page))  # Получаем какой странице соответствует данный id
+            if data:
+                return render(request, "store/product.html", context={"product": data})
+
+        return HttpResponse(status=404)
 
 
 def get_html(html_path: str | os.PathLike) -> HttpResponse:
@@ -51,16 +51,36 @@ def get_html(html_path: str | os.PathLike) -> HttpResponse:
 
 def shop_view(request):
     if request.method == "GET":
-        with open('store/shop.html', encoding="utf-8") as f:
-            data = f.read()
-        return HttpResponse(data)
+        category_key = request.GET.get("category")
+        if ordering_key := request.GET.get("ordering"):
+            if request.GET.get("reverse") in ('true', 'True'):
+                data = filtering_category(DATABASE, category_key, ordering_key,
+                                          True)
+            else:
+                data = filtering_category(DATABASE, category_key, ordering_key)
+        else:
+            data = filtering_category(DATABASE, category_key)
+        return render(request, 'store/shop.html',
+                      context={"products": data,
+                               "category": category_key})
+
 
 
 def cart_view(request):
     if request.method == "GET":
         data = view_in_cart() # TODO Вызвать ответственную за это действие функцию
-        return JsonResponse(data, json_dumps_params={'ensure_ascii': False,
-                                                     'indent': 4})
+        r_format = request.GET.get('format')
+        if not r_format:
+            products = []
+            for product_id, quantity in data['products'].items():
+                product = DATABASE[product_id]
+                product["quantity"] = quantity
+                product["price_total"] = f"{quantity * product['price_after']:.2f}"
+                products.append(product)
+            return render(request, "store/cart.html", context={"products": products})
+        if r_format.lower() == 'json':
+            return JsonResponse(data, json_dumps_params={'ensure_ascii': False,
+                                                         'indent': 4})
 
 
 def cart_add_view(request, id_product):
