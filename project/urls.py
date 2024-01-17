@@ -23,8 +23,6 @@ from app_datetime.views import datetime_view
 
 
 
-
-
 def random_view(request):
     if request.method == "GET":
         data = random()
@@ -36,5 +34,6 @@ urlpatterns = [
     path('random/', random_view),
     path('datetime/', datetime_view),
     path('', include('app_weather.urls')),
-    path('', include('store.urls'))
+    path('', include('store.urls')),
+    path('login/', include('app_login.urls')),
 ]
